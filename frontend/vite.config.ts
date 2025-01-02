@@ -9,8 +9,12 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
+      '@': path.resolve(__dirname, './src'),
+      'simple-peer': 'simple-peer/simplepeer.min.js',
     }
+  },
+  optimizeDeps: {
+    include: ['simple-peer']
   },
   // SPA için gerekli
   build: {

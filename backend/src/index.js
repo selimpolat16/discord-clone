@@ -84,6 +84,9 @@ const io = new Server(server, {
 // Online kullanıcıları ve durumlarını tutacak Map
 const onlineUsers = new Map();
 
+// Ses kanallarındaki kullanıcıları tutacak Map
+const voiceChannels = new Map();
+
 // Socket bağlantılarını yönet
 io.on('connection', (socket) => {
   console.log('Yeni socket bağlantısı:', socket.id);
@@ -155,11 +158,178 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Ses kanalına katılma
+  socket.on('voice:join', ({ channelId, userId }) => {
+    const user = onlineUsers.get(socket.id);
+    if (!user) return;
+
+    // Kullanıcıyı ses kanalına ekle
+    if (!voiceChannels.has(channelId)) {
+      voiceChannels.set(channelId, new Map());
+    }
+    
+    const channelUsers = voiceChannels.get(channelId);
+    channelUsers.set(userId, {
+      ...user,
+      channelId,
+      isMuted: false,
+      isDeafened: false
+    });
+
+    // Kullanıcıyı ses kanalı odasına ekle
+    socket.join(`voice:${channelId}`);
+
+    // Kanal üyelerini güncelle
+    io.to(`voice:${channelId}`).emit('voice:update', 
+      Array.from(channelUsers.values())
+    );
+  });
+
+  // Ses kanalından ayrılma
+  socket.on('voice:leave', ({ channelId, userId }) => {
+    const channelUsers = voiceChannels.get(channelId);
+    if (channelUsers) {
+      channelUsers.delete(userId);
+      socket.leave(`voice:${channelId}`);
+
+      if (channelUsers.size === 0) {
+        voiceChannels.delete(channelId);
+      }
+
+      io.to(`voice:${channelId}`).emit('voice:update', 
+        Array.from(channelUsers.values())
+      );
+    }
+  });
+
+  // Mikrofon durumu değişikliği
+  socket.on('voice:mute', ({ channelId, userId, isMuted }) => {
+    const channelUsers = voiceChannels.get(channelId);
+    if (channelUsers) {
+      const user = channelUsers.get(userId);
+      if (user) {
+        user.isMuted = isMuted;
+        channelUsers.set(userId, user);
+        io.to(`voice:${channelId}`).emit('voice:update', 
+          Array.from(channelUsers.values())
+        );
+      }
+    }
+  });
+
+  // Sağır modu değişikliği
+  socket.on('voice:deafen', ({ channelId, userId, isDeafened }) => {
+    const channelUsers = voiceChannels.get(channelId);
+    if (channelUsers) {
+      const user = channelUsers.get(userId);
+      if (user) {
+        user.isDeafened = isDeafened;
+        channelUsers.set(userId, user);
+        io.to(`voice:${channelId}`).emit('voice:update', 
+          Array.from(channelUsers.values())
+        );
+      }
+    }
+  });
+
+  // Ses sinyali iletimi
+  socket.on('voice:signal', ({ targetUserId, signal, channelId }) => {
+    const fromUser = onlineUsers.get(socket.id);
+    if (!fromUser) return;
+
+    // Hedef kullanıcıyı bul
+    let targetSocket = null;
+    onlineUsers.forEach((user, socketId) => {
+      if (user.id === targetUserId) {
+        targetSocket = socketId;
+      }
+    });
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('voice:signal', {
+        fromUserId: fromUser.id,
+        signal
+      });
+    }
+  });
+
+  // WebRTC sinyalleşme
+  socket.on('voice:offer', ({ targetUserId, offer, channelId }) => {
+    const fromUser = onlineUsers.get(socket.id);
+    if (!fromUser) return;
+
+    // Hedef kullanıcıyı bul
+    let targetSocket = null;
+    onlineUsers.forEach((user, socketId) => {
+      if (user.id === targetUserId) {
+        targetSocket = socketId;
+      }
+    });
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('voice:offer', {
+        fromUserId: fromUser.id,
+        offer
+      });
+    }
+  });
+
+  socket.on('voice:answer', ({ targetUserId, answer, channelId }) => {
+    const fromUser = onlineUsers.get(socket.id);
+    if (!fromUser) return;
+
+    let targetSocket = null;
+    onlineUsers.forEach((user, socketId) => {
+      if (user.id === targetUserId) {
+        targetSocket = socketId;
+      }
+    });
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('voice:answer', {
+        fromUserId: fromUser.id,
+        answer
+      });
+    }
+  });
+
+  socket.on('voice:ice-candidate', ({ targetUserId, candidate, channelId }) => {
+    const fromUser = onlineUsers.get(socket.id);
+    if (!fromUser) return;
+
+    let targetSocket = null;
+    onlineUsers.forEach((user, socketId) => {
+      if (user.id === targetUserId) {
+        targetSocket = socketId;
+      }
+    });
+
+    if (targetSocket) {
+      io.to(targetSocket).emit('voice:ice-candidate', {
+        fromUserId: fromUser.id,
+        candidate
+      });
+    }
+  });
+
   // Bağlantı koptuğunda
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
     // Tüm kullanıcılara güncel listeyi gönder
     io.emit('users:update', Array.from(onlineUsers.values()));
+
+    const user = onlineUsers.get(socket.id);
+    if (user) {
+      // Kullanıcıyı tüm ses kanallarından çıkar
+      voiceChannels.forEach((users, channelId) => {
+        if (users.has(user.id)) {
+          users.delete(user.id);
+          io.to(`voice:${channelId}`).emit('voice:update', 
+            Array.from(users.values())
+          );
+        }
+      });
+    }
   });
 });
 

@@ -3,6 +3,7 @@ import { FaHashtag } from 'react-icons/fa';
 import { Channel } from '../../types';
 import { socketService } from '../../services/socket.service';
 import axios from 'axios';
+import VoiceChannel from '../voice/VoiceChannel';
 
 interface Message {
   _id: string;
@@ -94,6 +95,10 @@ const ChatArea: React.FC<ChatAreaProps> = ({ channel }) => {
         <div className="text-white">Mesajlar yükleniyor...</div>
       </div>
     );
+  }
+
+  if (channel.type === 'voice') {
+    return <VoiceChannel channel={channel} />;
   }
 
   return (
