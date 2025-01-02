@@ -1,7 +1,8 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
+export default {
   content: [
-    "./src/**/*.{js,jsx,ts,tsx}",
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
   theme: {
@@ -19,6 +20,12 @@ module.exports = {
             opacity: '1',
             transform: 'translateY(0)'
           },
+        }
+      },
+      colors: {
+        discord: {
+          'primary': '#5865F2',
+          'secondary': '#4752C4',
         }
       }
     },

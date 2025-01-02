@@ -4,33 +4,55 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const Message = require('./models/message.model');
 
 // Express app oluştur
 const app = express();
 const server = http.createServer(app);
 
 // MongoDB bağlantısı
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('MongoDB bağlantısı başarılı');
-})
-.catch((err) => {
-  console.error('MongoDB bağlantı hatası:', err);
-  process.exit(1);
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log('MongoDB bağlantısı başarılı');
+  } catch (err) {
+    console.error('MongoDB bağlantı hatası:', err.message);
+    process.exit(1);
+  }
+};
+
+// İlk bağlantıyı başlat
+connectDB();
+
+// Bağlantı durumunu izle
+mongoose.connection.on('error', (err) => {
+  console.error('Mongoose bağlantı hatası:', err);
 });
 
-// Modelleri yükle
-require('./models/User');
-require('./models/channel.model');
-require('./models/message.model');
+mongoose.connection.on('disconnected', () => {
+  console.log('Mongoose bağlantısı kesildi');
+});
+
+// Uygulama kapandığında bağlantıyı düzgün şekilde kapat
+process.on('SIGINT', async () => {
+  try {
+    await mongoose.connection.close();
+    console.log('MongoDB bağlantısı kapatıldı');
+    process.exit(0);
+  } catch (err) {
+    console.error('MongoDB bağlantısı kapatılırken hata:', err);
+    process.exit(1);
+  }
+});
 
 // Route'ları yükle
 const authRoutes = require('./routes/auth.routes');
 const channelRoutes = require('./routes/channel.routes');
 const messageRoutes = require('./routes/message.routes');
+const serverRoutes = require('./routes/server.routes');
 
 // CORS ayarları
 app.use(cors({
@@ -39,6 +61,16 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/server', serverRoutes);
+app.use('/api/messages', messageRoutes);
+app.use('/api/channels', channelRoutes);
 
 // Socket.IO ayarları
 const io = new Server(server, {
@@ -49,28 +81,12 @@ const io = new Server(server, {
   }
 });
 
-// Socket hata yakalama
-io.engine.on("connection_error", (err) => {
-  console.log('Socket.IO bağlantı hatası:', err);
-});
-
-// Body parser middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/channels', channelRoutes);
-app.use('/api/messages', messageRoutes);
-
 // Socket.IO instance'ını express app'e ekle
 app.set('io', io);
 
-// Online kullanıcıları tutacak Map
+// Online kullanıcıları ve kanal bağlantılarını tutacak Map'ler
 const onlineUsers = new Map();
-
-// Ses kanalındaki kullanıcıları tut
-const voiceChannels = new Map();
+const channelConnections = new Map();
 
 // Socket bağlantılarını yönet
 io.on('connection', (socket) => {
@@ -82,34 +98,49 @@ io.on('connection', (socket) => {
       ...userData,
       socketId: socket.id
     });
-    
-    // Tüm kullanıcılara yeni kullanıcıyı bildir
-    socket.broadcast.emit('user:joined', userData);
-    
-    // Bağlanan kullanıcıya mevcut kullanıcı listesini gönder
     io.emit('users:update', Array.from(onlineUsers.values()));
   });
 
-  // Kullanıcı durumunu güncellediğinde
-  socket.on('user:updateStatus', (userData) => {
-    if (onlineUsers.has(socket.id)) {
-      onlineUsers.set(socket.id, {
-        ...userData,
-        socketId: socket.id
+  // Kanala katılma
+  socket.on('channel:join', (channelId) => {
+    socket.join(channelId);
+    console.log(`Kullanıcı ${socket.id} kanala katıldı: ${channelId}`);
+  });
+
+  // Kanaldan ayrılma
+  socket.on('channel:leave', (channelId) => {
+    socket.leave(channelId);
+    console.log(`Kullanıcı ${socket.id} kanaldan ayrıldı: ${channelId}`);
+  });
+
+  // Mesaj gönderme
+  socket.on('message:send', async (messageData) => {
+    try {
+      const { channelId, content } = messageData;
+      const user = onlineUsers.get(socket.id);
+
+      if (!user) return;
+
+      const message = new Message({
+        content,
+        channelId,
+        author: {
+          username: user.username,
+          avatar: user.avatar
+        }
       });
-      io.emit('users:update', Array.from(onlineUsers.values()));
+
+      await message.save();
+      io.to(channelId).emit('message:new', message);
+    } catch (error) {
+      console.error('Mesaj gönderme hatası:', error);
     }
   });
 
-  // Kullanıcı ayrıldığında
+  // Bağlantı koptuğunda
   socket.on('disconnect', () => {
-    const user = onlineUsers.get(socket.id);
-    if (user) {
-      socket.broadcast.emit('user:left', user.username);
-      onlineUsers.delete(socket.id);
-      io.emit('users:update', Array.from(onlineUsers.values()));
-    }
-    console.log('Kullanıcı ayrıldı:', socket.id);
+    onlineUsers.delete(socket.id);
+    io.emit('users:update', Array.from(onlineUsers.values()));
   });
 });
 

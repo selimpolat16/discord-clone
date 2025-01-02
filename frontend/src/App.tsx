@@ -1,18 +1,14 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Home from './pages/Home';
-import { authService } from './services/auth.service';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Login from './components/Login';
+import Home from './components/Home';
+import ProtectedRoute from './components/ProtectedRoute';
 
-// Korumalı Route bileşeni
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  if (!authService.isLoggedIn()) {
-    return <Navigate to="/login" />;
-  }
-  return <>{children}</>;
-};
+const App = () => {
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+  }, []);
 
-function App() {
   return (
     <Router>
       <Routes>
@@ -28,6 +24,6 @@ function App() {
       </Routes>
     </Router>
   );
-}
+};
 
 export default App; 

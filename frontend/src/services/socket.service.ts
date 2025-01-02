@@ -85,6 +85,18 @@ class SocketService {
       }
     });
   }
+
+  joinChannel(channelId: string) {
+    this.socket?.emit('channel:join', channelId);
+  }
+
+  leaveChannel(channelId: string) {
+    this.socket?.emit('channel:leave', channelId);
+  }
+
+  sendMessage(channelId: string, content: string) {
+    this.socket?.emit('message:send', { channelId, content });
+  }
 }
 
 export const socketService = new SocketService(); 

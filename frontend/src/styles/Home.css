@@ -1,0 +1,89 @@
+.home {
+  display: flex;
+  height: 100vh;
+  background-color: #36393f;
+}
+
+.channels-section {
+  width: 240px;
+  background-color: #2f3136;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #202225;
+}
+
+.channels-header {
+  padding: 1rem;
+  color: #fff;
+  border-bottom: 1px solid #202225;
+}
+
+.channels-header h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.channels-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem 0;
+}
+
+.channel-item {
+  padding: 0.5rem 1rem;
+  color: #8e9297;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.channel-item:hover {
+  background-color: #36393f;
+  color: #dcddde;
+}
+
+.channel-item.active {
+  background-color: #393c43;
+  color: #fff;
+}
+
+.channel-type {
+  color: #8e9297;
+}
+
+.channel-name {
+  font-size: 1rem;
+}
+
+.chat-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.no-channel-selected {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8e9297;
+}
+
+.no-channel-selected p {
+  font-size: 1.2rem;
+} 

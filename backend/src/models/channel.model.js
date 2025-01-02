@@ -4,13 +4,13 @@ const channelSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    trim: true,
-    lowercase: true
+    unique: true,
+    trim: true
   },
   type: {
     type: String,
     enum: ['text', 'voice'],
-    required: true
+    default: 'text'
   },
   createdAt: {
     type: Date,
@@ -18,7 +18,26 @@ const channelSchema = new mongoose.Schema({
   }
 });
 
-// Aynı isimde kanal oluşturulmasını engelle
-channelSchema.index({ name: 1 }, { unique: true });
+// Koleksiyonu temizle ve yeniden oluştur
+const setupCollection = async () => {
+  try {
+    await mongoose.connection.collections['channels']?.drop();
+    console.log('Channels koleksiyonu silindi');
+  } catch (error) {
+    console.log('Koleksiyon silme hatası (ilk çalıştırma olabilir):', error.message);
+  }
+};
 
-module.exports = mongoose.model('Channel', channelSchema); 
+// Schema seviyesinde index tanımla
+channelSchema.index({ name: 1 }, { 
+  unique: true,
+  background: true,
+  name: 'channel_name_unique' 
+});
+
+const Channel = mongoose.model('Channel', channelSchema);
+
+// Koleksiyonu hazırla
+setupCollection().catch(console.error);
+
+module.exports = Channel; 

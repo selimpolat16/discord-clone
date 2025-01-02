@@ -1,33 +1,28 @@
 import api from './api';
 
-export interface LoginResponse {
-  token: string;
-  user: {
-    id: string;
-    username: string;
-  };
+interface LoginCredentials {
+  username: string;
+}
+
+interface RegisterCredentials {
+  username: string;
 }
 
 export const authService = {
-  login: async (username: string): Promise<LoginResponse> => {
-    const response = await api.post('/auth/login', { username });
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('username', username);
-    }
+  login: async (credentials: LoginCredentials) => {
+    const response = await api.post('/auth/login', credentials);
     return response.data;
   },
 
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
+  register: async (credentials: RegisterCredentials) => {
+    const response = await api.post('/auth/register', credentials);
+    return response.data;
   },
 
-  isLoggedIn: (): boolean => {
-    return !!localStorage.getItem('token');
-  },
-
-  getUsername: (): string | null => {
-    return localStorage.getItem('username');
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    return response.data;
   }
-}; 
+};
+
+export default authService; 

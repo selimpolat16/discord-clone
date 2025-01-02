@@ -1,34 +1,32 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
 
-// Basit login
 router.post('/login', async (req, res) => {
   try {
     const { username } = req.body;
-
-    if (!username || username.trim().length < 3) {
-      return res.status(400).json({
-        error: 'Kullanıcı adı en az 3 karakter olmalıdır'
+    
+    if (!username) {
+      return res.status(400).json({ 
+        error: 'Kullanıcı adı gerekli' 
       });
     }
 
-    // JWT token oluştur
-    const token = jwt.sign(
-      { username },
-      process.env.JWT_SECRET || 'gizli-anahtar',
-      { expiresIn: '24h' }
-    );
-
+    // Başarılı giriş
     res.json({
-      token,
+      success: true,
       user: {
-        id: '1', // Sabit ID
-        username
-      }
+        username,
+        id: Date.now(),
+      },
+      message: 'Giriş başarılı'
     });
+
   } catch (error) {
-    res.status(500).json({ error: 'Giriş yapılırken bir hata oluştu' });
+    console.error('Login error:', error);
+    res.status(500).json({ 
+      error: 'Sunucu hatası',
+      details: error.message 
+    });
   }
 });
 
