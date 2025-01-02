@@ -169,6 +169,7 @@ io.on('connection', (socket) => {
     }
     
     const channelUsers = voiceChannels.get(channelId);
+    // Eğer kullanıcı zaten varsa, güncelle
     channelUsers.set(userId, {
       ...user,
       channelId,
@@ -312,12 +313,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Kullanıcı konuşmaya başladığında
+  socket.on('voice:speaking-start', ({ channelId, userId }) => {
+    io.to(channelId).emit('voice:user-speaking', { userId, speaking: true });
+  });
+
+  // Kullanıcı konuşmayı bitirdiğinde
+  socket.on('voice:speaking-end', ({ channelId, userId }) => {
+    io.to(channelId).emit('voice:user-speaking', { userId, speaking: false });
+  });
+
   // Bağlantı koptuğunda
   socket.on('disconnect', () => {
-    onlineUsers.delete(socket.id);
-    // Tüm kullanıcılara güncel listeyi gönder
-    io.emit('users:update', Array.from(onlineUsers.values()));
-
     const user = onlineUsers.get(socket.id);
     if (user) {
       // Kullanıcıyı tüm ses kanallarından çıkar
@@ -327,9 +334,13 @@ io.on('connection', (socket) => {
           io.to(`voice:${channelId}`).emit('voice:update', 
             Array.from(users.values())
           );
+          // Diğer kullanıcılara bildir
+          io.to(`voice:${channelId}`).emit('user:disconnect', user.id);
         }
       });
     }
+    onlineUsers.delete(socket.id);
+    io.emit('users:update', Array.from(onlineUsers.values()));
   });
 });
 
