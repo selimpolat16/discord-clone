@@ -3,17 +3,15 @@ import { User } from '../../types';
 import { socketService } from '../../services/socket.service';
 import { FaCircle, FaMoon, FaClock } from 'react-icons/fa';
 
-interface RightSidebarProps {
-  members: User[];
-}
-
-const RightSidebar: React.FC<RightSidebarProps> = ({ members }) => {
+const RightSidebar: React.FC = () => {
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
 
   useEffect(() => {
-    // Socket.IO üzerinden kullanıcı güncellemelerini dinle
     const handleUsersUpdate = (users: User[]) => {
-      setOnlineUsers(users);
+      // Kendimiz hariç diğer kullanıcıları filtrele
+      const otherUsers = users.filter(user => user.username !== currentUser.username);
+      setOnlineUsers(otherUsers);
     };
 
     socketService.socket?.on('users:update', handleUsersUpdate);
@@ -21,15 +19,15 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ members }) => {
     return () => {
       socketService.socket?.off('users:update', handleUsersUpdate);
     };
-  }, []);
+  }, [currentUser.username]);
 
   // Kullanıcıları durumlarına göre grupla
-  const groupedMembers = members.reduce((groups, member) => {
-    const userStatus = onlineUsers.find(u => u.username === member.username)?.status || 'offline';
-    if (!groups[userStatus]) {
-      groups[userStatus] = [];
+  const groupedUsers = onlineUsers.reduce((groups, user) => {
+    const status = user.status || 'offline';
+    if (!groups[status]) {
+      groups[status] = [];
     }
-    groups[userStatus].push(member);
+    groups[status].push(user);
     return groups;
   }, {} as Record<string, User[]>);
 
@@ -66,7 +64,7 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ members }) => {
       </div>
       
       <div className="flex-1 overflow-y-auto p-4">
-        {Object.entries(groupedMembers).map(([status, users]) => (
+        {Object.entries(groupedUsers).map(([status, users]) => (
           users.length > 0 && (
             <div key={status} className="mb-6">
               <div className="text-gray-400 text-sm flex items-center mb-2">
@@ -77,25 +75,17 @@ const RightSidebar: React.FC<RightSidebarProps> = ({ members }) => {
               <div className="space-y-2">
                 {users.map((user) => (
                   <div
-                    key={user.username}
+                    key={user.socketId}
                     className="flex items-center space-x-3 px-2 py-1 rounded hover:bg-gray-700 cursor-pointer group"
                   >
                     <div className="relative">
-                      {user.avatar ? (
-                        <img
-                          src={user.avatar}
-                          alt=""
-                          className="w-8 h-8 rounded-full"
-                        />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
-                          <span className="text-white text-sm">
-                            {user.username[0].toUpperCase()}
-                          </span>
-                        </div>
-                      )}
+                      <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">
+                        <span className="text-white text-sm">
+                          {user.username[0].toUpperCase()}
+                        </span>
+                      </div>
                       <div className="absolute -bottom-1 -right-1">
-                        {getStatusIcon(status)}
+                        {getStatusIcon(user.status || 'offline')}
                       </div>
                     </div>
                     <span className="text-gray-300 group-hover:text-white">

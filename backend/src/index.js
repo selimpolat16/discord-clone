@@ -90,13 +90,15 @@ io.on('connection', (socket) => {
 
   // Kullanıcı bağlandığında
   socket.on('user:connect', (userData) => {
-    onlineUsers.set(socket.id, {
-      ...userData,
-      socketId: socket.id,
-      status: 'online'
-    });
-    // Tüm kullanıcılara güncel kullanıcı listesini gönder
-    io.emit('users:update', Array.from(onlineUsers.values()));
+    if (userData) {
+      onlineUsers.set(socket.id, {
+        ...userData,
+        socketId: socket.id,
+        status: 'online'
+      });
+      // Tüm kullanıcılara güncel kullanıcı listesini gönder
+      io.emit('users:update', Array.from(onlineUsers.values()));
+    }
   });
 
   // Kullanıcı durumu değiştiğinde
@@ -105,6 +107,7 @@ io.on('connection', (socket) => {
     if (user) {
       user.status = status;
       onlineUsers.set(socket.id, user);
+      // Tüm kullanıcılara güncel durumu bildir
       io.emit('users:update', Array.from(onlineUsers.values()));
     }
   });
@@ -112,6 +115,7 @@ io.on('connection', (socket) => {
   // Bağlantı koptuğunda
   socket.on('disconnect', () => {
     onlineUsers.delete(socket.id);
+    // Tüm kullanıcılara güncel listeyi gönder
     io.emit('users:update', Array.from(onlineUsers.values()));
   });
 });
