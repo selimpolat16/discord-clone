@@ -1,54 +1,104 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const authMiddleware = require('../middleware/auth.middleware');
 const Channel = require('../models/channel.model');
 const Server = require('../models/server.model');
 
-let mainServer = null;
+// Tüm server route'larına auth middleware'ini ekle
+router.use(authMiddleware);
 
-// Ana sunucuyu oluştur veya getir
-router.get('/', auth, async (req, res) => {
+// Tüm sunucuları getir
+router.get('/', async (req, res) => {
   try {
-    if (!mainServer) {
-      mainServer = await Server.findOne();
-      if (!mainServer) {
-        const defaultMembers = [
-          {
-            username: "Kullanıcı 1",
-            status: "online",
-            avatar: null
-          },
-          {
-            username: "Kullanıcı 2",
-            status: "idle",
-            avatar: null
-          },
-          {
-            username: "Kullanıcı 3",
-            status: "dnd",
-            avatar: null
-          }
-        ];
-
-        mainServer = await new Server({
-          name: "Discord Clone Server",
-          channels: [],
-          members: defaultMembers
-        }).save();
-      }
-    }
-    
-    const populatedServer = await Server.findById(mainServer._id)
+    const servers = await Server.find()
       .populate('channels');
-    
-    res.json(populatedServer);
+    res.json(servers);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// Yeni sunucu oluştur
+router.post('/', async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Sunucu adı boş olamaz' });
+    }
+
+    // Varsayılan metin kanalını oluştur
+    const generalChannel = new Channel({
+      name: 'genel',
+      type: 'text'
+    });
+    await generalChannel.save();
+
+    // Yeni sunucuyu oluştur
+    const server = new Server({
+      name: name.trim(),
+      ownerId: req.user.username, // Token'dan gelen kullanıcı
+      channels: [generalChannel._id],
+      members: [{
+        username: req.user.username,
+        status: 'online'
+      }]
+    });
+
+    await server.save();
+
+    // Sunucuyu kanallarıyla birlikte getir
+    const populatedServer = await Server.findById(server._id)
+      .populate('channels');
+
+    res.status(201).json(populatedServer);
+  } catch (error) {
+    console.error('Sunucu oluşturma hatası:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Bu isimde bir sunucu zaten mevcut' });
+    }
+    res.status(500).json({ error: 'Sunucu oluşturulurken bir hata oluştu' });
+  }
+});
+
+// Kanal oluştur
+router.post('/:serverId/channels', async (req, res) => {
+  try {
+    const { name, type } = req.body;
+    const serverId = req.params.serverId;
+
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Kanal adı boş olamaz' });
+    }
+
+    // Yeni kanalı oluştur
+    const channel = new Channel({
+      name: name.trim(),
+      type: type || 'text'
+    });
+    await channel.save();
+
+    // Sunucuya kanalı ekle
+    const server = await Server.findById(serverId);
+    if (!server) {
+      return res.status(404).json({ error: 'Sunucu bulunamadı' });
+    }
+
+    server.channels.push(channel._id);
+    await server.save();
+
+    res.status(201).json(channel);
+  } catch (error) {
+    console.error('Kanal oluşturma hatası:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Bu isimde bir kanal zaten mevcut' });
+    }
+    res.status(500).json({ error: 'Kanal oluşturulurken bir hata oluştu' });
+  }
+});
+
 // Tüm kanalları getir
-router.get('/channels', auth, async (req, res) => {
+router.get('/channels', async (req, res) => {
   try {
     const channels = await Channel.find()
       .sort({ createdAt: -1 });
@@ -59,7 +109,7 @@ router.get('/channels', auth, async (req, res) => {
 });
 
 // Belirli bir kanalı getir
-router.get('/channels/:id', auth, async (req, res) => {
+router.get('/channels/:id', async (req, res) => {
   try {
     const channel = await Channel.findById(req.params.id);
     if (!channel) {
@@ -71,34 +121,8 @@ router.get('/channels/:id', auth, async (req, res) => {
   }
 });
 
-// Yeni kanal oluştur
-router.post('/channels', async (req, res) => {
-  try {
-    const { name, type } = req.body;
-
-    // İsim kontrolü
-    if (!name || name.trim().length === 0) {
-      return res.status(400).json({ error: 'Kanal adı boş olamaz' });
-    }
-
-    const channel = new Channel({
-      name: name.trim(),
-      type: type || 'text'
-    });
-
-    await channel.save();
-    res.status(201).json(channel);
-  } catch (error) {
-    console.error('Kanal oluşturma hatası:', error);
-    if (error.code === 11000) { // MongoDB duplicate key error
-      return res.status(400).json({ error: 'Bu isimde bir kanal zaten mevcut' });
-    }
-    res.status(500).json({ error: 'Kanal oluşturulurken bir hata oluştu' });
-  }
-});
-
 // Kanalı güncelle
-router.patch('/channels/:id', auth, async (req, res) => {
+router.patch('/channels/:id', async (req, res) => {
   try {
     const { name, type } = req.body;
     const channel = await Channel.findById(req.params.id);
@@ -121,7 +145,7 @@ router.patch('/channels/:id', auth, async (req, res) => {
 });
 
 // Kanalı sil
-router.delete('/channels/:id', auth, async (req, res) => {
+router.delete('/channels/:id', async (req, res) => {
   try {
     const channel = await Channel.findByIdAndDelete(req.params.id);
     if (!channel) {

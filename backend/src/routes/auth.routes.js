@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 
 router.post('/login', async (req, res) => {
   try {
@@ -11,6 +12,13 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Token oluştur
+    const token = jwt.sign(
+      { username },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '24h' }
+    );
+
     // Başarılı giriş
     res.json({
       success: true,
@@ -18,6 +26,7 @@ router.post('/login', async (req, res) => {
         username,
         id: Date.now(),
       },
+      token,
       message: 'Giriş başarılı'
     });
 

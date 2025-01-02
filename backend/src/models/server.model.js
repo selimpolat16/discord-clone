@@ -3,6 +3,16 @@ const mongoose = require('mongoose');
 const serverSchema = new mongoose.Schema({
   name: {
     type: String,
+    required: true,
+    unique: true,
+    trim: true
+  },
+  icon: {
+    type: String,
+    default: null
+  },
+  ownerId: {
+    type: String,
     required: true
   },
   channels: [{
@@ -13,13 +23,15 @@ const serverSchema = new mongoose.Schema({
     username: String,
     status: {
       type: String,
-      enum: ['online', 'idle', 'dnd', 'offline'],
+      enum: ['online', 'offline', 'idle', 'dnd'],
       default: 'online'
     },
-    avatar: String,
-    customStatus: String
-  }]
+    avatar: String
+  }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
 });
 
-const Server = mongoose.model('Server', serverSchema);
-module.exports = Server; 
+module.exports = mongoose.model('Server', serverSchema); 

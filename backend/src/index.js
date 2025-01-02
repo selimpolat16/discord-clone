@@ -68,7 +68,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/server', serverRoutes);
+app.use('/api/servers', serverRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/channels', channelRoutes);
 
@@ -81,12 +81,8 @@ const io = new Server(server, {
   }
 });
 
-// Socket.IO instance'ını express app'e ekle
-app.set('io', io);
-
-// Online kullanıcıları ve kanal bağlantılarını tutacak Map'ler
+// Online kullanıcıları ve durumlarını tutacak Map
 const onlineUsers = new Map();
-const channelConnections = new Map();
 
 // Socket bağlantılarını yönet
 io.on('connection', (socket) => {
@@ -96,44 +92,20 @@ io.on('connection', (socket) => {
   socket.on('user:connect', (userData) => {
     onlineUsers.set(socket.id, {
       ...userData,
-      socketId: socket.id
+      socketId: socket.id,
+      status: 'online'
     });
+    // Tüm kullanıcılara güncel kullanıcı listesini gönder
     io.emit('users:update', Array.from(onlineUsers.values()));
   });
 
-  // Kanala katılma
-  socket.on('channel:join', (channelId) => {
-    socket.join(channelId);
-    console.log(`Kullanıcı ${socket.id} kanala katıldı: ${channelId}`);
-  });
-
-  // Kanaldan ayrılma
-  socket.on('channel:leave', (channelId) => {
-    socket.leave(channelId);
-    console.log(`Kullanıcı ${socket.id} kanaldan ayrıldı: ${channelId}`);
-  });
-
-  // Mesaj gönderme
-  socket.on('message:send', async (messageData) => {
-    try {
-      const { channelId, content } = messageData;
-      const user = onlineUsers.get(socket.id);
-
-      if (!user) return;
-
-      const message = new Message({
-        content,
-        channelId,
-        author: {
-          username: user.username,
-          avatar: user.avatar
-        }
-      });
-
-      await message.save();
-      io.to(channelId).emit('message:new', message);
-    } catch (error) {
-      console.error('Mesaj gönderme hatası:', error);
+  // Kullanıcı durumu değiştiğinde
+  socket.on('user:status', ({ status }) => {
+    const user = onlineUsers.get(socket.id);
+    if (user) {
+      user.status = status;
+      onlineUsers.set(socket.id, user);
+      io.emit('users:update', Array.from(onlineUsers.values()));
     }
   });
 

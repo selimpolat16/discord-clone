@@ -11,12 +11,14 @@ const Login = () => {
     e.preventDefault();
     try {
       const response = await authService.login({ username });
-      console.log('Giriş başarılı:', response);
       
-      // Kullanıcı bilgilerini localStorage'a kaydet
-      localStorage.setItem('user', JSON.stringify(response.user));
+      // Token'ı ve kullanıcı bilgilerini localStorage'a kaydet
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify({
+        ...response.user,
+        token: response.token // Token'ı user objesi içinde de saklayalım
+      }));
       
-      // Ana sayfaya yönlendir
       navigate('/');
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 

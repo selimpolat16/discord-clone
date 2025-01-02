@@ -36,15 +36,7 @@ const ChannelList = () => {
         </div>
       </div>
       
-      {/* User Info */}
-      <div className="h-14 bg-gray-700 px-2 flex items-center">
-        <div className="flex items-center space-x-2">
-          <div className="w-8 h-8 rounded-full bg-gray-500"></div>
-          <div className="text-white text-sm">
-            {JSON.parse(localStorage.getItem('user') || '{}').username}
-          </div>
-        </div>
-      </div>
+    
     </div>
   );
 };
