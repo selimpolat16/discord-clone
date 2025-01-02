@@ -96,8 +96,51 @@ io.on('connection', (socket) => {
         socketId: socket.id,
         status: 'online'
       });
-      // Tüm kullanıcılara güncel kullanıcı listesini gönder
       io.emit('users:update', Array.from(onlineUsers.values()));
+    }
+  });
+
+  // Kanala katılma
+  socket.on('channel:join', (channelId) => {
+    socket.join(channelId);
+    console.log(`Kullanıcı ${socket.id} kanala katıldı: ${channelId}`);
+  });
+
+  // Kanaldan ayrılma
+  socket.on('channel:leave', (channelId) => {
+    socket.leave(channelId);
+    console.log(`Kullanıcı ${socket.id} kanaldan ayrıldı: ${channelId}`);
+  });
+
+  // Mesaj gönderme
+  socket.on('message:send', async ({ channelId, content }) => {
+    try {
+      const user = onlineUsers.get(socket.id);
+      if (!user) return;
+
+      // Yeni mesaj oluştur
+      const message = new Message({
+        content,
+        channelId,
+        author: {
+          username: user.username,
+          id: user.id
+        }
+      });
+
+      // Mesajı veritabanına kaydet
+      await message.save();
+
+      // Mesajı kanaldaki herkese gönder
+      io.to(channelId).emit('message:receive', {
+        _id: message._id,
+        content: message.content,
+        channelId: message.channelId,
+        author: message.author,
+        createdAt: message.createdAt
+      });
+    } catch (error) {
+      console.error('Mesaj gönderme hatası:', error);
     }
   });
 

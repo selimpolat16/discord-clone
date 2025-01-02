@@ -5,16 +5,15 @@ const messageSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  sender: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
   channelId: {
     type: String,
     required: true
   },
-  timestamp: {
+  author: {
+    username: String,
+    id: String
+  },
+  createdAt: {
     type: Date,
     default: Date.now
   }
