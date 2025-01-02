@@ -5,6 +5,7 @@ export interface User {
   channelId?: string;
   isMuted?: boolean;
   isDeafened?: boolean;
+  hasVideo?: boolean;
 }
 
 export interface Channel {

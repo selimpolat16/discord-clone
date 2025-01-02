@@ -87,6 +87,17 @@ const onlineUsers = new Map();
 // Ses kanallarındaki kullanıcıları tutacak Map
 const voiceChannels = new Map();
 
+// Ses kanalı yardımcı fonksiyonları - io.on('connection') dışında tanımlayın
+const getChannelUserCount = (channelId) => {
+  const channelUsers = voiceChannels.get(channelId);
+  return channelUsers ? channelUsers.size : 0;
+};
+
+const getChannelUsers = (channelId) => {
+  const channelUsers = voiceChannels.get(channelId);
+  return channelUsers ? Array.from(channelUsers.values()) : [];
+};
+
 // Socket bağlantılarını yönet
 io.on('connection', (socket) => {
   console.log('Yeni socket bağlantısı:', socket.id);
@@ -159,31 +170,32 @@ io.on('connection', (socket) => {
   });
 
   // Ses kanalına katılma
-  socket.on('voice:join', ({ channelId, userId }) => {
+  socket.on('voice:join', ({ channelId, userId, isMuted }) => {
     const user = onlineUsers.get(socket.id);
     if (!user) return;
 
-    // Kullanıcıyı ses kanalına ekle
     if (!voiceChannels.has(channelId)) {
       voiceChannels.set(channelId, new Map());
     }
     
     const channelUsers = voiceChannels.get(channelId);
-    // Eğer kullanıcı zaten varsa, güncelle
     channelUsers.set(userId, {
       ...user,
       channelId,
-      isMuted: false,
-      isDeafened: false
+      isMuted: isMuted || false,
+      isDeafened: false,
+      hasVideo: false
     });
 
-    // Kullanıcıyı ses kanalı odasına ekle
     socket.join(`voice:${channelId}`);
-
-    // Kanal üyelerini güncelle
-    io.to(`voice:${channelId}`).emit('voice:update', 
-      Array.from(channelUsers.values())
-    );
+    
+    // Kullanıcı sayısını ve listesini güncelle
+    io.to(`voice:${channelId}`).emit('voice:user-count', {
+      channelId,
+      count: getChannelUserCount(channelId)
+    });
+    
+    io.to(`voice:${channelId}`).emit('voice:update', getChannelUsers(channelId));
   });
 
   // Ses kanalından ayrılma
@@ -197,10 +209,22 @@ io.on('connection', (socket) => {
         voiceChannels.delete(channelId);
       }
 
-      io.to(`voice:${channelId}`).emit('voice:update', 
-        Array.from(channelUsers.values())
-      );
+      // Güncellenmiş kullanıcı listesini ve sayısını gönder
+      io.to(`voice:${channelId}`).emit('voice:update', getChannelUsers(channelId));
+      io.to(`voice:${channelId}`).emit('voice:user-count', {
+        channelId,
+        count: getChannelUserCount(channelId)
+      });
     }
+  });
+
+  // Kanal kullanıcılarını al
+  socket.on('voice:get-users', ({ channelId }) => {
+    socket.emit('voice:update', getChannelUsers(channelId));
+    socket.emit('voice:user-count', {
+      channelId,
+      count: getChannelUserCount(channelId)
+    });
   });
 
   // Mikrofon durumu değişikliği
@@ -209,11 +233,14 @@ io.on('connection', (socket) => {
     if (channelUsers) {
       const user = channelUsers.get(userId);
       if (user) {
+        // Kullanıcının mikrofon durumunu güncelle
         user.isMuted = isMuted;
         channelUsers.set(userId, user);
-        io.to(`voice:${channelId}`).emit('voice:update', 
-          Array.from(channelUsers.values())
-        );
+        
+        // Tüm kanal kullanıcılarına güncel listeyi gönder
+        io.to(`voice:${channelId}`).emit('voice:update', getChannelUsers(channelId));
+        
+        console.log(`Kullanıcı ${userId} mikrofon durumu: ${isMuted ? 'Kapalı' : 'Açık'}`);
       }
     }
   });
@@ -268,6 +295,7 @@ io.on('connection', (socket) => {
     });
 
     if (targetSocket) {
+      console.log(`Teklif iletiliyor: ${fromUser.id} -> ${targetUserId}`);
       io.to(targetSocket).emit('voice:offer', {
         fromUserId: fromUser.id,
         offer
@@ -275,7 +303,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('voice:answer', ({ targetUserId, answer, channelId }) => {
+  socket.on('voice:answer', ({ targetUserId, answer }) => {
     const fromUser = onlineUsers.get(socket.id);
     if (!fromUser) return;
 
@@ -287,6 +315,7 @@ io.on('connection', (socket) => {
     });
 
     if (targetSocket) {
+      console.log(`Cevap iletiliyor: ${fromUser.id} -> ${targetUserId}`);
       io.to(targetSocket).emit('voice:answer', {
         fromUserId: fromUser.id,
         answer
@@ -321,6 +350,19 @@ io.on('connection', (socket) => {
   // Kullanıcı konuşmayı bitirdiğinde
   socket.on('voice:speaking-end', ({ channelId, userId }) => {
     io.to(channelId).emit('voice:user-speaking', { userId, speaking: false });
+  });
+
+  // Video durumu değişikliği
+  socket.on('voice:video', ({ channelId, userId, hasVideo }) => {
+    const channelUsers = voiceChannels.get(channelId);
+    if (channelUsers) {
+      const user = channelUsers.get(userId);
+      if (user) {
+        user.hasVideo = hasVideo;
+        channelUsers.set(userId, user);
+        io.to(`voice:${channelId}`).emit('voice:update', Array.from(channelUsers.values()));
+      }
+    }
   });
 
   // Bağlantı koptuğunda

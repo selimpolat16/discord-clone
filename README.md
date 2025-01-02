@@ -49,11 +49,11 @@ Bu proje, Discord benzeri gerçek zamanlı bir sohbet ve iletişim platformudur.
 - [ ] Mesaj arama
 
 ### 4. Ses ve Görüntü Sistemi (Faz 4)
-- [ ] Sesli sohbet
+- [x] Sesli sohbet
 - [ ] Ekran paylaşımı
 - [ ] Video görüşmesi
-- [ ] Ses seviyesi kontrolü
-- [ ] Ses filtreleme
+- [x] Ses seviyesi kontrolü
+- [x] Ses filtreleme
 
 ### 5. Arkadaşlık Sistemi (Faz 5)
 - [ ] Arkadaş ekleme
