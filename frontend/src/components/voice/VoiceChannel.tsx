@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FaMicrophone, FaHeadphones, FaPhoneSlash, FaVolumeUp } from 'react-icons/fa';
+import { FaMicrophone, FaHeadphones, FaPhoneSlash, FaVolumeUp, FaVolumeMute, FaCog } from 'react-icons/fa';
 import { socketService } from '../../services/socket.service';
 import { Channel, User } from '../../types';
 
@@ -14,6 +14,15 @@ interface PeerConnection {
   audioLevel?: number;
 }
 
+interface UserAudioSettings {
+  volume: number;
+  filters: {
+    noiseSuppression: boolean;
+    echoCancellation: boolean;
+    autoGainControl: boolean;
+  };
+}
+
 const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
   const [connectedUsers, setConnectedUsers] = useState<User[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -26,6 +35,188 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
   const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set());
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [volume, setVolume] = useState<number>(100);
+  const [showVolumeControls, setShowVolumeControls] = useState<boolean>(false);
+  const [filters, setFilters] = useState({
+    noiseSuppression: true,
+    echoCancellation: true,
+    autoGainControl: true
+  });
+  const [userSettings, setUserSettings] = useState<Map<string, UserAudioSettings>>(new Map());
+  const [showSettingsForUser, setShowSettingsForUser] = useState<string | null>(null);
+
+  // Kullanıcı ses ayarlarını başlat
+  const initUserSettings = (userId: string) => {
+    if (!userSettings.has(userId)) {
+      setUserSettings(prev => new Map(prev).set(userId, {
+        volume: 100,
+        filters: {
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: true
+        }
+      }));
+    }
+  };
+
+  // Ses seviyesini ayarla
+  const handleVolumeChange = (userId: string, volume: number) => {
+    const audio = audioElements.current.get(userId);
+    if (audio) {
+      audio.volume = volume / 100;
+      setUserSettings(prev => {
+        const newSettings = new Map(prev);
+        const settings = newSettings.get(userId) || {
+          volume: 100,
+          filters: { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+        };
+        newSettings.set(userId, { ...settings, volume });
+        return newSettings;
+      });
+
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(audio.srcObject as MediaStream);
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = volume / 100;
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+    }
+  };
+
+  // Ses filtresini değiştir
+  const toggleFilter = async (userId: string, filterName: keyof UserAudioSettings['filters']) => {
+    const settings = userSettings.get(userId);
+    if (!settings) return;
+
+    const newFilters = {
+      ...settings.filters,
+      [filterName]: !settings.filters[filterName]
+    };
+
+    setUserSettings(prev => {
+      const newSettings = new Map(prev);
+      newSettings.set(userId, {
+        ...settings,
+        filters: newFilters
+      });
+      return newSettings;
+    });
+
+    if (userId === currentUser.id && localStream) {
+      try {
+        localStream.getTracks().forEach(track => track.stop());
+
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            ...newFilters,
+            channelCount: 1,
+            sampleRate: 48000,
+            sampleSize: 16,
+            latency: 0.01,
+            volume: settings.volume / 100
+          }
+        });
+
+        setLocalStream(newStream);
+
+        peerConnections.forEach(({ connection }) => {
+          const sender = connection.getSenders().find(s => s.track?.kind === 'audio');
+          if (sender) {
+            sender.replaceTrack(newStream.getAudioTracks()[0]);
+          }
+        });
+
+        detectVoiceActivity(newStream, currentUser.id);
+      } catch (error) {
+        console.error('Ses filtresi güncellenirken hata:', error);
+      }
+    }
+  };
+
+  // Kullanıcı kartı
+  const UserCard = ({ user }: { user: User }) => {
+    // Kullanıcı ayarlarını başlat
+    useEffect(() => {
+      initUserSettings(user.id);
+    }, [user.id]);
+
+    const settings = userSettings.get(user.id);
+    const isSettingsOpen = showSettingsForUser === user.id;
+
+    if (!settings) return null; // Ayarlar yüklenene kadar bekle
+
+    return (
+      <div className="relative flex items-center space-x-3 p-2 rounded-md bg-gray-800">
+        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 ${
+          speakingUsers.has(user.id) ? 'bg-green-500' : 'bg-gray-600'
+        }`}>
+          <span className="text-white">{user.username[0].toUpperCase()}</span>
+        </div>
+        <span className="text-white">{user.username}</span>
+        
+        <div className="ml-auto flex items-center space-x-2">
+          {user.isMuted && <FaMicrophone className="text-red-500" title="Mikrofon Kapalı" />}
+          {user.isDeafened && <FaHeadphones className="text-red-500" title="Ses Kapalı" />}
+          
+          <button
+            onClick={() => setShowSettingsForUser(isSettingsOpen ? null : user.id)}
+            className="p-1 rounded hover:bg-gray-700"
+            title="Ses Ayarları"
+          >
+            <FaCog className="text-gray-400" />
+          </button>
+        </div>
+
+        {isSettingsOpen && (
+          <div className="absolute right-0 top-full mt-2 p-4 bg-gray-800 rounded-md shadow-lg z-10">
+            <div className="space-y-4 min-w-[200px]">
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">Ses Seviyesi</label>
+                <div className="flex items-center space-x-2">
+                  <FaVolumeMute className="text-gray-400" />
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={settings.volume}
+                    onChange={(e) => handleVolumeChange(user.id, Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <FaVolumeUp className="text-gray-400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">Ses Filtreleri</label>
+                <div className="space-y-2">
+                  {Object.entries(settings.filters).map(([key, value]) => (
+                    <button
+                      key={key}
+                      onClick={() => toggleFilter(user.id, key as keyof UserAudioSettings['filters'])}
+                      className={`w-full px-2 py-1 rounded text-sm ${
+                        value ? 'bg-blue-500' : 'bg-gray-600'
+                      } hover:opacity-90 transition-opacity`}
+                    >
+                      {key === 'noiseSuppression' && 'Gürültü Önleme'}
+                      {key === 'echoCancellation' && 'Eko Önleme'}
+                      {key === 'autoGainControl' && 'Otomatik Kazanç'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Yeni kullanıcılar bağlandığında ayarlarını başlat
+  useEffect(() => {
+    connectedUsers.forEach(user => {
+      initUserSettings(user.id);
+    });
+  }, [connectedUsers]);
 
   // Ses aktivitesini tespit et
   const detectVoiceActivity = (stream: MediaStream, userId: string) => {
@@ -79,7 +270,12 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          channelCount: 1, // Mono ses
+          sampleRate: 48000, // Yüksek örnekleme hızı
+          sampleSize: 16, // 16-bit ses kalitesi
+          latency: 0.01, // Düşük gecikme
+          volume: 1.0 // Tam ses seviyesi
         }
       });
       setLocalStream(stream);
@@ -96,6 +292,25 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
     const audio = new Audio();
     audio.srcObject = stream;
     audio.autoplay = true;
+
+    const settings = userSettings.get(userId);
+    if (settings) {
+      audio.volume = settings.volume / 100;
+
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const gainNode = audioContext.createGain();
+      const analyser = audioContext.createAnalyser();
+
+      gainNode.gain.value = settings.volume / 100;
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+
+      source.connect(gainNode);
+      gainNode.connect(analyser);
+      analyser.connect(audioContext.destination);
+    }
+
     audioElements.current.set(userId, audio);
     detectVoiceActivity(stream, userId);
   };
@@ -107,11 +322,7 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
     const peerConnection = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { 
-          urls: 'turn:numb.viagenie.ca',
-          username: 'webrtc@live.com',
-          credential: 'muazkh'
-        }
+        { urls: 'stun:stun1.l.google.com:19302' }
       ]
     });
 
@@ -121,13 +332,18 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
       peerConnection.addTrack(track, stream);
     });
 
-    // Bağlantı durumu değişikliklerini izle
-    peerConnection.onconnectionstatechange = () => {
-      console.log('Bağlantı durumu:', peerConnection.connectionState);
-    };
-
-    peerConnection.oniceconnectionstatechange = () => {
-      console.log('ICE bağlantı durumu:', peerConnection.iceConnectionState);
+    // Uzak ses akışını al
+    peerConnection.ontrack = (event) => {
+      console.log('Uzak ses track\'i alındı:', event.streams[0]);
+      const [remoteStream] = event.streams;
+      
+      const audio = new Audio();
+      audio.srcObject = remoteStream;
+      audio.autoplay = true;
+      audio.play().catch(console.error);
+      
+      audioElements.current.set(targetUserId, audio);
+      detectVoiceActivity(remoteStream, targetUserId);
     };
 
     // ICE adaylarını dinle ve gönder
@@ -142,11 +358,8 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
       }
     };
 
-    // Uzak ses akışını al
-    peerConnection.ontrack = (event) => {
-      console.log('Uzak ses track\'i alındı:', event.streams[0]);
-      const [remoteStream] = event.streams;
-      handleRemoteStream(remoteStream, targetUserId);
+    peerConnection.onconnectionstatechange = () => {
+      console.log('Bağlantı durumu:', peerConnection.connectionState);
     };
 
     peerConnections.set(targetUserId, {
@@ -156,6 +369,32 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
     });
 
     return peerConnection;
+  };
+
+  // Bağlantı koptuğunda yeniden bağlanma
+  const handleReconnect = async (targetUserId: string) => {
+    console.log('Bağlantı yeniden kuruluyor:', targetUserId);
+    const oldConnection = peerConnections.get(targetUserId);
+    if (oldConnection) {
+      oldConnection.connection.close();
+      peerConnections.delete(targetUserId);
+    }
+
+    if (localStream) {
+      const peerConnection = await createPeerConnection(targetUserId, localStream);
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+        voiceActivityDetection: true
+      });
+      
+      await peerConnection.setLocalDescription(offer);
+      socketService.socket?.emit('voice:offer', {
+        targetUserId,
+        offer,
+        channelId: channel._id
+      });
+    }
   };
 
   useEffect(() => {
@@ -247,14 +486,10 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
           const peerConnection = await createPeerConnection(user.id, stream);
           
           try {
-            const offer = await peerConnection.createOffer({
-              offerToReceiveAudio: true,
-              offerToReceiveVideo: false
-            });
-            
+            const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-            console.log('Teklif gönderiliyor:', user.username);
             
+            console.log('Teklif gönderiliyor:', user.username);
             socketService.socket?.emit('voice:offer', {
               targetUserId: user.id,
               offer,
@@ -320,15 +555,11 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
 
   const toggleMute = () => {
     if (localStream) {
-      // Tüm ses trackleri için mikrofonu aç/kapat
       localStream.getAudioTracks().forEach(track => {
-        track.enabled = isMuted; // Şu anki durumun tersini ayarla
+        track.enabled = !isMuted; // Düzeltildi: Mevcut durumun tersini ayarla
       });
-
-      // Durum güncellemesi
       setIsMuted(!isMuted);
-
-      // Diğer kullanıcılara bildir
+      
       socketService.socket?.emit('voice:mute', {
         channelId: channel._id,
         userId: currentUser.id,
@@ -405,29 +636,7 @@ const VoiceChannel: React.FC<VoiceChannelProps> = ({ channel }) => {
       <div className="flex-1 p-4">
         <div className="space-y-2">
           {connectedUsers.map((user) => (
-            <div
-              key={user.id}
-              className="flex items-center space-x-3 p-2 rounded-md bg-gray-800"
-            >
-              <div 
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 ${
-                  speakingUsers.has(user.id) ? 'bg-green-500' : 'bg-gray-600'
-                }`}
-              >
-                <span className="text-white">
-                  {user.username[0].toUpperCase()}
-                </span>
-              </div>
-              <span className="text-white">{user.username}</span>
-              <div className="ml-auto flex space-x-2">
-                {user.isMuted && (
-                  <FaMicrophone className="text-red-500" title="Mikrofon Kapalı" />
-                )}
-                {user.isDeafened && (
-                  <FaHeadphones className="text-red-500" title="Ses Kapalı" />
-                )}
-              </div>
-            </div>
+            <UserCard key={user.id} user={user} />
           ))}
         </div>
 
