@@ -21,28 +21,28 @@ Bu proje, Discord benzeri gerçek zamanlı bir sohbet ve iletişim platformudur.
 ## 🗺 Geliştirme Yol Haritası
 
 ### 1. Temel Altyapı (Faz 1)
-  - [ ] Giriş sistemi
+  - [x] Giriş sistemi
   - [ ] Profil düzenleme
-    - [ ] Kullanıcı adı ve tag sistemi
+    - [x] Kullanıcı adı ve tag sistemi
   - [ ] Avatar yükleme
     - [ ] Resim yükleme ve kırpma
     - [ ] Varsayılan avatar seçenekleri
-  - [ ] Durum ayarlama
-    - [ ] Çevrimiçi durumu
-    - [ ] Meşgul durumu
-    - [ ] Rahatsız etmeyin durumu
-    - [ ] Çevrimdışı görünme
-    - [ ] Özel durum mesajı
+  - [x] Durum ayarlama
+    - [x] Çevrimiçi durumu
+    - [x] Meşgul durumu
+    - [x] Rahatsız etmeyin durumu
+    - [x] Çevrimdışı görünme
+    - [x] Özel durum mesajı
 
 ### 2. Sunucu ve Kanal Sistemi (Faz 2)
 - [x] Sunucu oluşturma ve yönetimi
-- [ ] Kanal oluşturma (metin ve ses)
+- [x] Kanal oluşturma (metin ve ses)
 - [ ] Rol sistemi
   - [ ] Rol oluşturma
   - [ ] İzin yönetimi
 
 ### 3. Mesajlaşma Sistemi (Faz 3)
-- [ ] Gerçek zamanlı metin mesajlaşması
+- [x] Gerçek zamanlı metin mesajlaşması
 - [ ] Dosya paylaşımı
 - [ ] Emoji ve reaksiyon sistemi
 - [ ] Mesaj düzenleme ve silme
@@ -58,7 +58,7 @@ Bu proje, Discord benzeri gerçek zamanlı bir sohbet ve iletişim platformudur.
 ### 5. Arkadaşlık Sistemi (Faz 5)
 - [ ] Arkadaş ekleme
 - [ ] Direkt mesajlaşma
-- [ ] Çevrimiçi durum takibi
+- [x] Çevrimiçi durum takibi
 
 ### 6. Bildirim Sistemi (Faz 6)
 - [ ] Anlık bildirimler
